@@ -51,9 +51,16 @@ jobs:
 
       - name: Build Tauri app (macOS ARM)
         shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
-        run: pnpm tauri build --target aarch64-apple-darwin
+        run: |
+          # Disable updater to avoid signing key requirement
+          node -e "
+            const fs = require('fs');
+            const f = 'src-tauri/tauri.conf.json';
+            const c = JSON.parse(fs.readFileSync(f,'utf8'));
+            c.bundle.createUpdaterArtifacts = false;
+            fs.writeFileSync(f, JSON.stringify(c, null, 2));
+          "
+          pnpm tauri build --target aarch64-apple-darwin
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
