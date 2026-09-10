@@ -62,6 +62,16 @@ jobs:
           "
           pnpm tauri build --target aarch64-apple-darwin
 
+      - name: Ad-hoc sign and fix DMG
+        shell: bash
+        run: |
+          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/CC Switch.app"
+          # Ad-hoc sign the app bundle so Gatekeeper doesn't reject it
+          codesign --force --deep --sign - "$APP"
+          # Clear quarantine xattr so it doesn't show "damaged" on open
+          xattr -cr "$APP"
+          echo "Ad-hoc signed and cleared quarantine"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
