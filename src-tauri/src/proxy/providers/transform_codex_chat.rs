@@ -894,7 +894,7 @@ fn flush_pending_tool_calls(
     flush_pending_chat_tool_media(messages, pending_media);
     let mut message = json!({
         "role": "assistant",
-        "content": null,
+        "content": "",
         "tool_calls": std::mem::take(pending_tool_calls)
     });
     attach_pending_reasoning_to_assistant(&mut message, pending_reasoning);
@@ -913,7 +913,7 @@ fn responses_message_item_to_chat_message(
     let content = item
         .get("content")
         .map(|value| responses_content_to_chat_content(chat_role, value))
-        .unwrap_or(Value::Null);
+        .unwrap_or_else(|| Value::String(String::new()));
 
     let mut message = json!({
         "role": chat_role,
@@ -1110,7 +1110,10 @@ fn responses_reasoning_item_text(item: &Value) -> Option<String> {
 }
 
 fn responses_content_to_chat_content(_role: &str, content: &Value) -> Value {
-    if content.is_null() || content.is_string() {
+    if content.is_null() {
+        return Value::String(String::new());
+    }
+    if content.is_string() {
         return content.clone();
     }
 
