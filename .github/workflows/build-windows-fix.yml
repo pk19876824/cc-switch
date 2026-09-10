@@ -1,0 +1,61 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup pnpm
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          corepack enable
+          corepack install
+          node --version
+          pnpm --version
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app (Windows)
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+        run: pnpm tauri build --target x86_64-pc-windows-msvc
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cc-switch-windows-fix
+          path: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          retention-days: 30
