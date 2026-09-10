@@ -1,0 +1,80 @@
+name: Build macOS Universal
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-universal:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add macOS targets
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Setup pnpm
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          corepack enable
+          corepack install
+          node --version
+          pnpm --version
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app (macOS Universal)
+        shell: bash
+        run: |
+          # Disable updater to avoid signing key requirement
+          node -e "
+            const fs = require('fs');
+            const f = 'src-tauri/tauri.conf.json';
+            const c = JSON.parse(fs.readFileSync(f,'utf8'));
+            c.bundle.createUpdaterArtifacts = false;
+            fs.writeFileSync(f, JSON.stringify(c, null, 2));
+          "
+          pnpm tauri build --target universal-apple-darwin
+
+      - name: Ad-hoc sign and fix app
+        shell: bash
+        run: |
+          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/CC Switch.app"
+          codesign --force --deep --sign - "$APP"
+          xattr -cr "$APP"
+          echo "Ad-hoc signed and cleared quarantine"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cc-switch-macos-universal-fix
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+          retention-days: 30
